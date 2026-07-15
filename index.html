@@ -2978,7 +2978,21 @@ async function cargarAdmin(){
   cargarBackups();
   var rU=await api('getUsuarios',{});
   var uc=document.getElementById('adm-usu');
-  if(rU.ok&&rU.usuarios)uc.innerHTML=(rU.usuarios||[]).map(function(u){return'<div class="ci2"><div><div class="cn">'+u.etiqueta+' <span style="font-weight:400;color:#999">('+u.badge+')</span></div><div class="cc">'+u.rol+' · '+(u.grupo||'—')+'</div></div><div style="display:flex;align-items:center;gap:6px"><span class="bdg '+(u.activo?'bdres':'bdven')+'">'+(u.activo?'Activo':'Inactivo')+'</span><button class="btn bo bsm" style="padding:4px 8px;font-size:10px" onclick="editarEmpleoUsuario(\''+u.badge+'\',\''+(u.empleo||'Agente')+'\')">✏️ Empleo</button><button class="btn bo bsm" style="padding:4px 8px;font-size:10px" onclick="genCodigoRecPin(\''+u.badge+'\')">🔑 Código PIN</button></div></div>';}).join('');
+  if(rU.ok&&rU.usuarios){
+    var ordenRol={admin:0,jefatura:1,concejal:2,agente:3};
+    var listaOrdenada=(rU.usuarios||[]).slice().sort(function(a,b){
+      var oa=ordenRol[a.rol]!==undefined?ordenRol[a.rol]:99;
+      var ob=ordenRol[b.rol]!==undefined?ordenRol[b.rol]:99;
+      if(oa!==ob)return oa-ob;
+      if(a.rol==='agente'&&b.rol==='agente'){
+        var ga=a.grupo||'zzz', gb=b.grupo||'zzz';
+        var cg=ga.localeCompare(gb,'es',{numeric:true});
+        if(cg!==0)return cg;
+      }
+      return (a.etiqueta||'').localeCompare(b.etiqueta||'','es');
+    });
+    uc.innerHTML=listaOrdenada.map(function(u){return'<div class="ci2"><div><div class="cn">'+u.etiqueta+' <span style="font-weight:400;color:#999">('+u.badge+')</span></div><div class="cc">'+u.rol+' · '+(u.grupo||'—')+'</div></div><div style="display:flex;align-items:center;gap:6px"><span class="bdg '+(u.activo?'bdres':'bdven')+'">'+(u.activo?'Activo':'Inactivo')+'</span><button class="btn bo bsm" style="padding:4px 8px;font-size:10px" onclick="editarEmpleoUsuario(\''+u.badge+'\',\''+(u.empleo||'Agente')+'\')">✏️ Empleo</button><button class="btn bo bsm" style="padding:4px 8px;font-size:10px" onclick="genCodigoRecPin(\''+u.badge+'\')">🔑 Código PIN</button></div></div>';}).join('');
+  }
 
   var rA=await api('getAreas',{});
   var ac=document.getElementById('adm-areas');
