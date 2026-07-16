@@ -1538,6 +1538,8 @@ function getArr(n){
     case 'fVB64': return fVB64;
     case 'fSVB64': return fSVB64;
     case 'fVNegB64': return fVNegB64;
+    case 'fInmovB64': return fInmovB64;
+    case 'fOcuB64': return fOcuB64;
     case 'fSIB64': return fSIB64;
     case 'cSIB64': return cSIB64;
     case 'fSHB64': return fSHB64;
@@ -1550,6 +1552,8 @@ function getInp(n){
     case 'fVB64': return 'inp-fveh';
     case 'fSVB64': return 'inp-fsv';
     case 'fVNegB64': return 'inp-fvehneg';
+    case 'fInmovB64': return 'inp-finmov';
+    case 'fOcuB64': return 'inp-focu';
     case 'fSIB64': return 'inp-fsi';
     case 'cSIB64': return 'inp-csi';
     case 'fSHB64': return 'inp-fsh';
@@ -1587,8 +1591,9 @@ async function guardarInc(){
 
   var btn=document.getElementById('btn-guard');btn.disabled=true;btn.textContent='⏳ Guardando...';
 
-  var urls=[];
-  for(var i=0;i<fB64.length;i++){var rf=await api('subirFoto',fB64[i]);if(rf.ok)urls.push(rf.url);}
+  var urls=[],fallosFoto=0;
+  for(var i=0;i<fB64.length;i++){var rf=await api('subirFoto',fB64[i]);if(rf.ok)urls.push(rf.url);else fallosFoto++;}
+  if(fallosFoto>0)toast('⚠️ '+fallosFoto+' foto(s) no se pudieron subir — se registrará sin ellas','err');
 
   var datos={
     calle:document.getElementById('f-calle').value.trim(),
@@ -1910,7 +1915,7 @@ async function cambiarEst(){if(!incAct)return;var r=await api('actualizarEstado'
 async function proponerCierre(){
   if(!incAct)return;
   var urlF='';
-  if(fotoCierre64){var rf=await api('subirFoto',fotoCierre64);if(rf.ok)urlF=rf.url;}
+  if(fotoCierre64){var rf=await api('subirFoto',fotoCierre64);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto de resolución no se pudo subir — se cierra sin ella','err');}
   var obs=(document.getElementById('acc-cobs')?document.getElementById('acc-cobs').value:'')||'';
   var r=await api('actualizarEstado',{id:incAct.id,nuevoEstado:'Propuesta de cierre',observaciones:obs,fotoCierre:urlF});
   if(r.ok){toast('✅ Propuesta de cierre enviada a jefatura','ok');fotoCierre64=null;verDet(incAct.id);}
@@ -2180,7 +2185,7 @@ var fotoSVCierre64=null;
 function capFotoSVCierre(inp){var f=inp.files[0];if(!f)return;comprimirImagen(f).then(function(res){fotoSVCierre64={base64:res.base64,mimeType:res.mimeType,nombre:f.name};toast('✅ Foto capturada','ok');}).catch(function(){toast('⚠️ No se pudo procesar la foto','error');});}
 async function cerrarSenal(){
   if(!svAct)return;
-  var urlF='';if(fotoSVCierre64){var rf=await api('subirFoto',fotoSVCierre64);if(rf.ok)urlF=rf.url;}
+  var urlF='';if(fotoSVCierre64){var rf=await api('subirFoto',fotoSVCierre64);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
   var r=await api('actualizarSenalV',{id:svAct.id,estado:'Resuelta',fechaResolucion:new Date().toISOString(),fotoCierre:urlF,obsResolucion:document.getElementById('sv-acc-cierre-obs').value});
   if(r.ok){toast('✅ Señal cerrada y verificada','ok');fotoSVCierre64=null;showSubS('inv');}
   else toast('Error','err');
@@ -2234,7 +2239,7 @@ var fotoSHCierre64=null;
 function capFotoSHCierre(inp){var f=inp.files[0];if(!f)return;comprimirImagen(f).then(function(res){fotoSHCierre64={base64:res.base64,mimeType:res.mimeType,nombre:f.name};toast('✅ Foto capturada','ok');}).catch(function(){toast('⚠️ No se pudo procesar la foto','error');});}
 async function cerrarSenalH(){
   if(!shAct)return;
-  var urlF='';if(fotoSHCierre64){var rf=await api('subirFoto',fotoSHCierre64);if(rf.ok)urlF=rf.url;}
+  var urlF='';if(fotoSHCierre64){var rf=await api('subirFoto',fotoSHCierre64);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
   var r=await api('actualizarSenalH',{id:shAct.id,estado:'Resuelta',fechaResolucion:new Date().toISOString(),fotoCierre:urlF,obsResolucion:document.getElementById('sh-acc-cierre-obs').value});
   if(r.ok){toast('✅ Señal cerrada y verificada','ok');fotoSHCierre64=null;showSubS('inv');}
   else toast('Error','err');
@@ -2262,7 +2267,7 @@ async function guardarSV(){
     if(!manual){toast('Especifica el código y descripción de la señal','err');return;}
     cod=manual;
   }
-  var urlF='';if(fSVB64.length){var rf=await api('subirFoto',fSVB64[0]);if(rf.ok)urlF=rf.url;}
+  var urlF='';if(fSVB64.length){var rf=await api('subirFoto',fSVB64[0]);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
   var datosSV={codigo:cod,tipo:catSenSel,descripcion:document.getElementById('sv-desc').value,calle,numero:document.getElementById('sv-num2').value,ladoCalzada:document.getElementById('sv-lado').value,soporte:document.getElementById('sv-sop').value,estado:document.getElementById('sv-est').value,fotoInicial:urlF,observaciones:document.getElementById('sv-obs').value};
   var r=await api('crearSenalV',datosSV);
   if(r.offline){encolarOffline('crearSenalV',datosSV);return;}
@@ -2278,7 +2283,7 @@ async function guardarSH(){
     if(!manual){toast('Especifica el tipo de señal','err');return;}
     tipo=manual;
   }
-  var urlF='';if(fSHB64.length){var rf=await api('subirFoto',fSHB64[0]);if(rf.ok)urlF=rf.url;}
+  var urlF='';if(fSHB64.length){var rf=await api('subirFoto',fSHB64[0]);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
   var datosSH={tipo:tipo,estado:document.getElementById('sh-est').value,calle,numero:document.getElementById('sh-numero').value,longitud:document.getElementById('sh-long').value,descripcion:document.getElementById('sh-obs').value,fotoInicial:urlF};
   var r=await api('crearSenalH',datosSH);
   if(r.offline){encolarOffline('crearSenalH',datosSH);return;}
@@ -2287,8 +2292,8 @@ async function guardarSH(){
 
 async function guardarSI(){
   var nom=document.getElementById('si-nom').value.trim();if(!nom){toast('El nombre es obligatorio','err');return;}
-  var urlF='';if(fSIB64.length){var rf=await api('subirFoto',fSIB64[0]);if(rf.ok)urlF=rf.url;}
-  var urlC='';if(cSIB64.length){var rc=await api('subirFoto',cSIB64[0]);if(rc.ok)urlC=rc.url;}
+  var urlF='';if(fSIB64.length){var rf=await api('subirFoto',fSIB64[0]);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
+  var urlC='';if(cSIB64.length){var rc=await api('subirFoto',cSIB64[0]);if(rc.ok)urlC=rc.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
   var datosSI={nombre:nom,senalizacionExistente:document.getElementById('si-exist').value,deficit:document.getElementById('si-def').value,nivelRiesgo:document.getElementById('si-riesgo').value,propuestaActuacion:document.getElementById('si-prop').value,fotoInicial:urlF,croquisPropuesta:urlC};
   var r=await api('crearInterseccion',datosSI);
   if(r.offline){encolarOffline('crearInterseccion',datosSI);return;}
@@ -2415,7 +2420,8 @@ async function guardarVeh(modo){
     if(!infs.length){toast('Selecciona al menos una infracción','err');return;}
     var rResDep=await resolverDepositoInmov();
     if(!rResDep.ok)return;
-    var urlsI=[];for(var k=0;k<fInmovB64.length;k++){var rfi=await api('subirFoto',fInmovB64[k]);if(rfi.ok)urlsI.push(rfi.url);}
+    var urlsI=[],fallosI=0;for(var k=0;k<fInmovB64.length;k++){var rfi=await api('subirFoto',fInmovB64[k]);if(rfi.ok)urlsI.push(rfi.url);else fallosI++;}
+    if(fallosI>0)toast('⚠️ '+fallosI+' foto(s) no se pudieron subir — se registrará sin ellas','err');
     var datosI={fase:'Vehículo sin seguro — retirada grúa',matricula:matI,bastidor:document.getElementById('inmov-bast').value,marca:document.getElementById('inmov-marca').value,modelo:document.getElementById('inmov-mod').value,color:document.getElementById('inmov-col').value,titular:document.getElementById('inmov-tit').value,dni:document.getElementById('inmov-dni').value,domicilio:document.getElementById('inmov-dom').value,telefono:document.getElementById('inmov-tel').value,calle:calleI,numero:document.getElementById('inmov-numref').value,infracciones:JSON.stringify(infs),nExpedienteInmovilizacion:document.getElementById('inmov-exp').value,pendienteRetirada:document.getElementById('inmov-pendiente').value,depositoId:rResDep.depositoId||'',observaciones:document.getElementById('inmov-obs').value,agentes:SES.usuario.badge,fotos:urlsI.join(','),municipio:'La Zubia'};
     var rI=await api('crearVehiculo',datosI);
     if(rI.offline){encolarOffline('crearVehiculo',datosI);return;}
@@ -2434,7 +2440,8 @@ async function guardarVeh(modo){
   if(modo==='negativa'){
     var matN=document.getElementById('vehneg-mat').value.trim(),calleN=document.getElementById('vehneg-calle').value.trim();
     if(!matN||!calleN){toast('Matrícula y calle son obligatorias','err');return;}
-    var urlsN=[];for(var j=0;j<fVNegB64.length;j++){var rfn=await api('subirFoto',fVNegB64[j]);if(rfn.ok)urlsN.push(rfn.url);}
+    var urlsN=[],fallosN=0;for(var j=0;j<fVNegB64.length;j++){var rfn=await api('subirFoto',fVNegB64[j]);if(rfn.ok)urlsN.push(rfn.url);else fallosN++;}
+    if(fallosN>0)toast('⚠️ '+fallosN+' foto(s) no se pudieron subir — se registrará sin ellas','err');
     var datosN={fase:'Consulta negativa',matricula:matN,marca:document.getElementById('vehneg-marca').value,calle:calleN,numero:document.getElementById('vehneg-num').value,observaciones:document.getElementById('vehneg-obs').value,agentes:SES.usuario.badge,fotos:urlsN.join(','),municipio:'La Zubia'};
     var rN=await api('crearVehiculo',datosN);
     if(rN.offline){encolarOffline('crearVehiculo',datosN);return;}
@@ -2446,7 +2453,8 @@ async function guardarVeh(modo){
   if(!mat||!calle){toast('Matrícula y calle son obligatorias','err');return;}
   var ind=[];document.querySelectorAll('.ib.sl').forEach(function(b){ind.push(b.dataset.ind);});
   if(!ind.length){toast('Selecciona al menos un indicio de abandono','err');return;}
-  var urls=[];for(var i=0;i<fVB64.length;i++){var rf=await api('subirFoto',fVB64[i]);if(rf.ok)urls.push(rf.url);}
+  var urls=[],fallosV=0;for(var i=0;i<fVB64.length;i++){var rf=await api('subirFoto',fVB64[i]);if(rf.ok)urls.push(rf.url);else fallosV++;}
+  if(fallosV>0)toast('⚠️ '+fallosV+' foto(s) no se pudieron subir — se registrará sin ellas','err');
   var datosVeh={fase:'Acta de vehículo abandonado',matricula:mat,bastidor:document.getElementById('veh-bast').value,marca:document.getElementById('veh-marca').value,modelo:document.getElementById('veh-mod').value,color:document.getElementById('veh-col').value,titular:document.getElementById('veh-tit').value,dni:document.getElementById('veh-dni').value,domicilio:document.getElementById('veh-dom').value,municipioTitular:document.getElementById('veh-mun').value,telefono:document.getElementById('veh-tel').value,calle,numero:document.getElementById('veh-numref').value,indicios:ind.join(', '),observaciones:document.getElementById('veh-obs').value,agentes:agSelVeh.map(function(a){return a.badge;}).join(';')||SES.usuario.badge,fotos:urls.join(','),municipio:'La Zubia'};
   var r=await api('crearVehiculo',datosVeh);
   if(r.offline){encolarOffline('crearVehiculo',datosVeh);return;}
@@ -2791,7 +2799,8 @@ async function guardarOcupacion(){
     if(!otroDesc){toast('Especifica de qué se trata','err');return;}
     obs=('Tipo no catalogado: '+otroDesc)+(obs?' | '+obs:'');
   }
-  var urlsOcu=[];for(var kOcu=0;kOcu<fOcuB64.length;kOcu++){var rfOcu=await api('subirFoto',fOcuB64[kOcu]);if(rfOcu.ok)urlsOcu.push(rfOcu.url);}
+  var urlsOcu=[],fallosOcu=0;for(var kOcu=0;kOcu<fOcuB64.length;kOcu++){var rfOcu=await api('subirFoto',fOcuB64[kOcu]);if(rfOcu.ok)urlsOcu.push(rfOcu.url);else fallosOcu++;}
+  if(fallosOcu>0)toast('⚠️ '+fallosOcu+' foto(s) no se pudieron subir — se registrará sin ellas','err');
   var datos={
     tipoOcupacion:tipo,subtipo:sub,
     origenRegistro:document.getElementById('ocu-origen').value,
@@ -3201,7 +3210,7 @@ async function enviarComp(compId){
   var res=document.getElementById('comp-res').value;
   var obs=document.getElementById('comp-obs').value;
   var urlF='';
-  if(fotoComp64){var rf=await api('subirFoto',fotoComp64);if(rf.ok)urlF=rf.url;}
+  if(fotoComp64){var rf=await api('subirFoto',fotoComp64);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
   var r=await api('realizarComprobacion',{id:compId,resultado:res,fotoComprobacion:urlF,observaciones:obs});
   if(r.ok){
     toast(res==='Resuelto'?'✅ Comprobación confirmada — incidencia resuelta':'⚠️ Comprobación realizada — incidencia reabierta',res==='Resuelto'?'ok':'err');
