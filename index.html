@@ -1161,6 +1161,14 @@ async function api(a,d){
 // ═══════════════════════════════════════════════════════════
 function toast(m,t){t=t||'';var el=document.getElementById('toast');el.textContent=m;el.className='toast show '+(t||'');setTimeout(function(){el.className='toast';},3500);}
 function fmtF(iso){if(!iso)return'—';try{var d=new Date(iso);return d.toLocaleDateString('es-ES')+' '+d.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});}catch(e){return iso;}}
+// Convierte una URL de Google Drive (página de visualización, no descargable como imagen directa)
+// en una URL que sí se puede usar como src de <img>. Sin esto, todas las miniaturas de foto
+// salen rotas porque archivo.getUrl() del backend devuelve el visor HTML, no la imagen.
+function urlImg(u){
+  if(!u)return u;
+  var m=u.match(/\/d\/([a-zA-Z0-9_-]+)/)||u.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  return m?('https://lh3.googleusercontent.com/d/'+m[1]+'=w1000'):u;
+}
 function dR(iso){if(!iso)return null;return Math.ceil((new Date(iso)-new Date())/86400000);}
 function bU(u){var c={Urgente:'bdu',Alta:'bda',Media:'bdm',Baja:'bdb'};return'<span class="bdg '+(c[u]||'bdm')+'">'+(u||'—')+'</span>';}
 function bE(e){var c={'Registrada':'bdreg','Comunicada':'bdcom','En gestión':'bdges','Propuesta de cierre':'bdpen','Resuelta':'bdres','Vencida':'bdven'};return'<span class="bdg '+(c[e]||'bdreg')+'">'+(e||'—')+'</span>';}
@@ -1819,10 +1827,10 @@ async function verDet(id){
     if(inc.fotos){
       var fotosArr=inc.fotos.split(',').filter(Boolean);
       fotosArr.forEach(function(f,idx){
-        fh+='<div><a href="'+f+'" target="_blank"><img src="'+f+'" class="fth" style="width:100%"></a><div class="fcl">📷 Foto '+(idx+1)+(fotosArr.length===1?' (inicial)':'')+'</div></div>';
+        fh+='<div><a href="'+f+'" target="_blank"><img src="'+urlImg(f)+'" class="fth" style="width:100%"></a><div class="fcl">📷 Foto '+(idx+1)+(fotosArr.length===1?' (inicial)':'')+'</div></div>';
       });
     }
-    if(inc.fotoCierre)fh+='<div><a href="'+inc.fotoCierre+'" target="_blank"><img src="'+inc.fotoCierre+'" class="fth" style="width:100%"></a><div class="fcl">✅ Foto de resolución</div></div>';
+    if(inc.fotoCierre)fh+='<div><a href="'+inc.fotoCierre+'" target="_blank"><img src="'+urlImg(inc.fotoCierre)+'" class="fth" style="width:100%"></a><div class="fcl">✅ Foto de resolución</div></div>';
     fd.innerHTML=fh;
   }else fc.style.display='none';
 
@@ -2139,8 +2147,8 @@ async function verDetSenal(id){
   var fc=document.getElementById('sv-det-fotos-card'),fd=document.getElementById('sv-det-fotos');
   if(sv.fotoInicial||sv.fotoCierre){
     fc.style.display='block';var fh='';
-    if(sv.fotoInicial)fh+='<div><a href="'+sv.fotoInicial+'" target="_blank"><img src="'+sv.fotoInicial+'" class="fth" style="width:100%"></a><div class="fcl">📷 Estado inicial</div></div>';
-    if(sv.fotoCierre)fh+='<div><a href="'+sv.fotoCierre+'" target="_blank"><img src="'+sv.fotoCierre+'" class="fth" style="width:100%"></a><div class="fcl">✅ Tras resolución</div></div>';
+    if(sv.fotoInicial)fh+='<div><a href="'+sv.fotoInicial+'" target="_blank"><img src="'+urlImg(sv.fotoInicial)+'" class="fth" style="width:100%"></a><div class="fcl">📷 Estado inicial</div></div>';
+    if(sv.fotoCierre)fh+='<div><a href="'+sv.fotoCierre+'" target="_blank"><img src="'+urlImg(sv.fotoCierre)+'" class="fth" style="width:100%"></a><div class="fcl">✅ Tras resolución</div></div>';
     fd.innerHTML=fh;
   }else fc.style.display='none';
   // Acciones señal
@@ -2195,8 +2203,8 @@ async function verDetSenalH(id){
   var fc=document.getElementById('sh-det-fotos-card'),fd=document.getElementById('sh-det-fotos');
   if(sh.fotoInicial||sh.fotoCierre){
     fc.style.display='block';var fh='';
-    if(sh.fotoInicial)fh+='<div><a href="'+sh.fotoInicial+'" target="_blank"><img src="'+sh.fotoInicial+'" class="fth" style="width:100%"></a><div class="fcl">📷 Estado inicial</div></div>';
-    if(sh.fotoCierre)fh+='<div><a href="'+sh.fotoCierre+'" target="_blank"><img src="'+sh.fotoCierre+'" class="fth" style="width:100%"></a><div class="fcl">✅ Tras resolución</div></div>';
+    if(sh.fotoInicial)fh+='<div><a href="'+sh.fotoInicial+'" target="_blank"><img src="'+urlImg(sh.fotoInicial)+'" class="fth" style="width:100%"></a><div class="fcl">📷 Estado inicial</div></div>';
+    if(sh.fotoCierre)fh+='<div><a href="'+sh.fotoCierre+'" target="_blank"><img src="'+urlImg(sh.fotoCierre)+'" class="fth" style="width:100%"></a><div class="fcl">✅ Tras resolución</div></div>';
     fd.innerHTML=fh;
   }else fc.style.display='none';
   var ac=document.getElementById('sh-det-acc');
@@ -2330,7 +2338,7 @@ async function verDetInterseccion(id){
   if(i.croquisPropuesta)fotosArr.push({url:i.croquisPropuesta,etq:'Croquis de propuesta'});
   if(fotosArr.length){
     fotosCard.style.display='block';
-    fotosDiv.innerHTML=fotosArr.map(function(f){return'<a href="'+f.url+'" target="_blank"><img src="'+f.url+'" class="fth" style="width:100%"></a><div class="fcl">'+f.etq+'</div>';}).join('');
+    fotosDiv.innerHTML=fotosArr.map(function(f){return'<a href="'+f.url+'" target="_blank"><img src="'+urlImg(f.url)+'" class="fth" style="width:100%"></a><div class="fcl">'+f.etq+'</div>';}).join('');
   }else{fotosCard.style.display='none';}
   document.getElementById('modal-veh-detalle').style.display='flex';
 }
@@ -2555,7 +2563,7 @@ async function verDetOcup(id){
   var fotosArr=o.fotos?String(o.fotos).split(',').filter(Boolean):[];
   if(fotosArr.length){
     fotosCard.style.display='block';
-    fotosDiv.innerHTML=fotosArr.map(function(f){return'<a href="'+f+'" target="_blank"><img src="'+f+'" class="fth" style="width:100%"></a>';}).join('');
+    fotosDiv.innerHTML=fotosArr.map(function(f){return'<a href="'+f+'" target="_blank"><img src="'+urlImg(f)+'" class="fth" style="width:100%"></a>';}).join('');
   }else{fotosCard.style.display='none';}
   document.getElementById('modal-veh-detalle').style.display='flex';
 }
@@ -2591,7 +2599,7 @@ async function verDetVeh(id){
   var fotosArr=v.fotos?String(v.fotos).split(',').filter(Boolean):[];
   if(fotosArr.length){
     fotosCard.style.display='block';
-    fotosDiv.innerHTML=fotosArr.map(function(f){return'<a href="'+f+'" target="_blank"><img src="'+f+'" class="fth" style="width:100%"></a>';}).join('');
+    fotosDiv.innerHTML=fotosArr.map(function(f){return'<a href="'+f+'" target="_blank"><img src="'+urlImg(f)+'" class="fth" style="width:100%"></a>';}).join('');
   }else{fotosCard.style.display='none';}
   document.getElementById('modal-veh-detalle').style.display='flex';
 }
@@ -3116,8 +3124,8 @@ async function mostrarBannerLogin(){
   var comps=rc.ok?(rc.comprobaciones||[]).filter(function(c){return c.estado==='Pendiente';}).length:0;
 
   var banners=[];
-  if(vencidas.length)banners.push({tipo:'err',tit:'⏰ '+vencidas.length+' incidencia(s) vencida(s)',items:vencidas.slice(0,3).map(function(i){return i.id+' — '+(i.calle||'—');})});
-  if(proximas.length)banners.push({tipo:'warn',tit:'⚠️ '+proximas.length+' incidencia(s) vencen en ≤ 3 días',items:proximas.slice(0,3).map(function(i){return i.id+' — '+(i.calle||'—')+' ('+dR(i.fechaPlazo)+'d)';})});
+  if(vencidas.length)banners.push({tipo:'err',tit:'⏰ '+vencidas.length+' incidencia(s) vencida(s)',items:vencidas.slice(0,3).map(function(i){return {id:i.id,txt:i.id+' — '+(i.calle||'—')};})});
+  if(proximas.length)banners.push({tipo:'warn',tit:'⚠️ '+proximas.length+' incidencia(s) vencen en ≤ 3 días',items:proximas.slice(0,3).map(function(i){return {id:i.id,txt:i.id+' — '+(i.calle||'—')+' ('+dR(i.fechaPlazo)+'d)'};})});
   if(cierres.length&&['admin','jefatura'].includes(SES.usuario.rol))banners.push({tipo:'ok',tit:'✅ '+cierres.length+' propuesta(s) de cierre pendientes de validar',items:[]});
   if(comps>0)banners.push({tipo:'warn',tit:'🔍 '+comps+' comprobación(es) pendiente(s) in situ',items:[]});
 
@@ -3127,7 +3135,7 @@ async function mostrarBannerLogin(){
     banners.map(function(b){
     var cls=b.tipo==='err'?'login-banner':b.tipo==='ok'?'login-banner-ok':'login-banner';
     return'<div class="'+cls+'"><div class="lban-tit">'+b.tit+'</div>'+
-      b.items.map(function(it){return'<div class="lban-item">'+it+'</div>';}).join('')+
+      b.items.map(function(it){return'<div class="lban-item" style="cursor:pointer;text-decoration:underline" onclick="verDet(\''+it.id+'\')">'+it.txt+'</div>';}).join('')+
       '</div>';
   }).join('')+'</div>';
 
