@@ -1156,6 +1156,21 @@ async function api(a,d){
   }catch(e){return{ok:false,error:'Sin conexión',offline:true};}
 }
 
+// apiPost: idéntica a api() pero manda los datos en el CUERPO de un POST en vez de en la
+// query string de un GET. Imprescindible para payloads grandes (fotos en base64), que en
+// una URL superan el límite práctico de longitud y provocan fallos de subida silenciosos.
+// El backend (doPost -> handleRequest) ya fusiona e.postData.contents con e.parameter,
+// así que no requiere ningún cambio en el Apps Script.
+async function apiPost(a,d){
+  d=d||{};
+  var p=Object.assign({action:a},SES?{token:SES.token}:{},d);
+  try{
+    var r=await fetch(API,{method:'POST',redirect:'follow',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(p)});
+    var t=await r.text();
+    try{return JSON.parse(t);}catch(e){return{ok:false,error:'Respuesta inválida del servidor'};}
+  }catch(e){return{ok:false,error:'Sin conexión',offline:true};}
+}
+
 // ═══════════════════════════════════════════════════════════
 // UTILIDADES
 // ═══════════════════════════════════════════════════════════
@@ -1164,10 +1179,23 @@ function fmtF(iso){if(!iso)return'—';try{var d=new Date(iso);return d.toLocale
 // Convierte una URL de Google Drive (página de visualización, no descargable como imagen directa)
 // en una URL que sí se puede usar como src de <img>. Sin esto, todas las miniaturas de foto
 // salen rotas porque archivo.getUrl() del backend devuelve el visor HTML, no la imagen.
-function urlImg(u){
-  if(!u)return u;
-  var m=u.match(/\/d\/([a-zA-Z0-9_-]+)/)||u.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-  return m?('https://lh3.googleusercontent.com/d/'+m[1]+'=w1000'):u;
+// Ya NO se usa una URL pública de Drive como src de la imagen (podía estar bloqueada por
+// políticas de Google Workspace del dominio institucional, fuera del control del script).
+// En su lugar, cada miniatura se pide al propio backend (misma vía autenticada que el resto
+// de la app) y se pinta en base64. pintarFotoLazy hace la petición; activarFotosLazy dispara
+// la carga de todas las miniaturas .lazyfoto dentro de un contenedor recién insertado en el DOM.
+async function pintarFotoLazy(img){
+  var url=img.getAttribute('data-url');
+  if(!url)return;
+  try{
+    var r=await api('getFoto',{id:url});
+    if(r.ok){img.src='data:'+r.mimeType+';base64,'+r.base64;img.style.background='none';}
+    else{img.alt='⚠️ No se pudo cargar';img.style.cssText+='background:#fee;display:flex;align-items:center;justify-content:center;font-size:10px;color:#900';}
+  }catch(e){img.alt='⚠️ Error de red';}
+}
+function activarFotosLazy(container){
+  if(!container)return;
+  container.querySelectorAll('img.lazyfoto').forEach(function(img){pintarFotoLazy(img);});
 }
 function dR(iso){if(!iso)return null;return Math.ceil((new Date(iso)-new Date())/86400000);}
 function bU(u){var c={Urgente:'bdu',Alta:'bda',Media:'bdm',Baja:'bdb'};return'<span class="bdg '+(c[u]||'bdm')+'">'+(u||'—')+'</span>';}
@@ -1592,7 +1620,7 @@ async function guardarInc(){
   var btn=document.getElementById('btn-guard');btn.disabled=true;btn.textContent='⏳ Guardando...';
 
   var urls=[],fallosFoto=0;
-  for(var i=0;i<fB64.length;i++){var rf=await api('subirFoto',fB64[i]);if(rf.ok)urls.push(rf.url);else fallosFoto++;}
+  for(var i=0;i<fB64.length;i++){var rf=await apiPost('subirFoto',fB64[i]);if(rf.ok)urls.push(rf.url);else fallosFoto++;}
   if(fallosFoto>0)toast('⚠️ '+fallosFoto+' foto(s) no se pudieron subir — se registrará sin ellas','err');
 
   var datos={
@@ -1832,11 +1860,11 @@ async function verDet(id){
     if(inc.fotos){
       var fotosArr=inc.fotos.split(',').filter(Boolean);
       fotosArr.forEach(function(f,idx){
-        fh+='<div><a href="'+f+'" target="_blank"><img src="'+urlImg(f)+'" class="fth" style="width:100%"></a><div class="fcl">📷 Foto '+(idx+1)+(fotosArr.length===1?' (inicial)':'')+'</div></div>';
+        fh+='<div><a href="'+f+'" target="_blank"><img class="fth lazyfoto" data-url="'+f+'" style="width:100%;min-height:80px;background:#eee"></a><div class="fcl">📷 Foto '+(idx+1)+(fotosArr.length===1?' (inicial)':'')+'</div></div>';
       });
     }
-    if(inc.fotoCierre)fh+='<div><a href="'+inc.fotoCierre+'" target="_blank"><img src="'+urlImg(inc.fotoCierre)+'" class="fth" style="width:100%"></a><div class="fcl">✅ Foto de resolución</div></div>';
-    fd.innerHTML=fh;
+    if(inc.fotoCierre)fh+='<div><a href="'+inc.fotoCierre+'" target="_blank"><img class="fth lazyfoto" data-url="'+inc.fotoCierre+'" style="width:100%;min-height:80px;background:#eee"></a><div class="fcl">✅ Foto de resolución</div></div>';
+    fd.innerHTML=fh;activarFotosLazy(fd);
   }else fc.style.display='none';
 
   // Resolución
@@ -1915,7 +1943,7 @@ async function cambiarEst(){if(!incAct)return;var r=await api('actualizarEstado'
 async function proponerCierre(){
   if(!incAct)return;
   var urlF='';
-  if(fotoCierre64){var rf=await api('subirFoto',fotoCierre64);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto de resolución no se pudo subir — se cierra sin ella','err');}
+  if(fotoCierre64){var rf=await apiPost('subirFoto',fotoCierre64);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto de resolución no se pudo subir — se cierra sin ella','err');}
   var obs=(document.getElementById('acc-cobs')?document.getElementById('acc-cobs').value:'')||'';
   var r=await api('actualizarEstado',{id:incAct.id,nuevoEstado:'Propuesta de cierre',observaciones:obs,fotoCierre:urlF});
   if(r.ok){toast('✅ Propuesta de cierre enviada a jefatura','ok');fotoCierre64=null;verDet(incAct.id);}
@@ -2152,9 +2180,9 @@ async function verDetSenal(id){
   var fc=document.getElementById('sv-det-fotos-card'),fd=document.getElementById('sv-det-fotos');
   if(sv.fotoInicial||sv.fotoCierre){
     fc.style.display='block';var fh='';
-    if(sv.fotoInicial)fh+='<div><a href="'+sv.fotoInicial+'" target="_blank"><img src="'+urlImg(sv.fotoInicial)+'" class="fth" style="width:100%"></a><div class="fcl">📷 Estado inicial</div></div>';
-    if(sv.fotoCierre)fh+='<div><a href="'+sv.fotoCierre+'" target="_blank"><img src="'+urlImg(sv.fotoCierre)+'" class="fth" style="width:100%"></a><div class="fcl">✅ Tras resolución</div></div>';
-    fd.innerHTML=fh;
+    if(sv.fotoInicial)fh+='<div><a href="'+sv.fotoInicial+'" target="_blank"><img class="fth lazyfoto" data-url="'+sv.fotoInicial+'" style="width:100%;min-height:80px;background:#eee"></a><div class="fcl">📷 Estado inicial</div></div>';
+    if(sv.fotoCierre)fh+='<div><a href="'+sv.fotoCierre+'" target="_blank"><img class="fth lazyfoto" data-url="'+sv.fotoCierre+'" style="width:100%;min-height:80px;background:#eee"></a><div class="fcl">✅ Tras resolución</div></div>';
+    fd.innerHTML=fh;activarFotosLazy(fd);
   }else fc.style.display='none';
   // Acciones señal
   var ac=document.getElementById('sv-det-acc');
@@ -2185,7 +2213,7 @@ var fotoSVCierre64=null;
 function capFotoSVCierre(inp){var f=inp.files[0];if(!f)return;comprimirImagen(f).then(function(res){fotoSVCierre64={base64:res.base64,mimeType:res.mimeType,nombre:f.name};toast('✅ Foto capturada','ok');}).catch(function(){toast('⚠️ No se pudo procesar la foto','error');});}
 async function cerrarSenal(){
   if(!svAct)return;
-  var urlF='';if(fotoSVCierre64){var rf=await api('subirFoto',fotoSVCierre64);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
+  var urlF='';if(fotoSVCierre64){var rf=await apiPost('subirFoto',fotoSVCierre64);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
   var r=await api('actualizarSenalV',{id:svAct.id,estado:'Resuelta',fechaResolucion:new Date().toISOString(),fotoCierre:urlF,obsResolucion:document.getElementById('sv-acc-cierre-obs').value});
   if(r.ok){toast('✅ Señal cerrada y verificada','ok');fotoSVCierre64=null;showSubS('inv');}
   else toast('Error','err');
@@ -2208,9 +2236,9 @@ async function verDetSenalH(id){
   var fc=document.getElementById('sh-det-fotos-card'),fd=document.getElementById('sh-det-fotos');
   if(sh.fotoInicial||sh.fotoCierre){
     fc.style.display='block';var fh='';
-    if(sh.fotoInicial)fh+='<div><a href="'+sh.fotoInicial+'" target="_blank"><img src="'+urlImg(sh.fotoInicial)+'" class="fth" style="width:100%"></a><div class="fcl">📷 Estado inicial</div></div>';
-    if(sh.fotoCierre)fh+='<div><a href="'+sh.fotoCierre+'" target="_blank"><img src="'+urlImg(sh.fotoCierre)+'" class="fth" style="width:100%"></a><div class="fcl">✅ Tras resolución</div></div>';
-    fd.innerHTML=fh;
+    if(sh.fotoInicial)fh+='<div><a href="'+sh.fotoInicial+'" target="_blank"><img class="fth lazyfoto" data-url="'+sh.fotoInicial+'" style="width:100%;min-height:80px;background:#eee"></a><div class="fcl">📷 Estado inicial</div></div>';
+    if(sh.fotoCierre)fh+='<div><a href="'+sh.fotoCierre+'" target="_blank"><img class="fth lazyfoto" data-url="'+sh.fotoCierre+'" style="width:100%;min-height:80px;background:#eee"></a><div class="fcl">✅ Tras resolución</div></div>';
+    fd.innerHTML=fh;activarFotosLazy(fd);
   }else fc.style.display='none';
   var ac=document.getElementById('sh-det-acc');
   if(SES&&sh.estado!=='Resuelta'){
@@ -2239,7 +2267,7 @@ var fotoSHCierre64=null;
 function capFotoSHCierre(inp){var f=inp.files[0];if(!f)return;comprimirImagen(f).then(function(res){fotoSHCierre64={base64:res.base64,mimeType:res.mimeType,nombre:f.name};toast('✅ Foto capturada','ok');}).catch(function(){toast('⚠️ No se pudo procesar la foto','error');});}
 async function cerrarSenalH(){
   if(!shAct)return;
-  var urlF='';if(fotoSHCierre64){var rf=await api('subirFoto',fotoSHCierre64);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
+  var urlF='';if(fotoSHCierre64){var rf=await apiPost('subirFoto',fotoSHCierre64);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
   var r=await api('actualizarSenalH',{id:shAct.id,estado:'Resuelta',fechaResolucion:new Date().toISOString(),fotoCierre:urlF,obsResolucion:document.getElementById('sh-acc-cierre-obs').value});
   if(r.ok){toast('✅ Señal cerrada y verificada','ok');fotoSHCierre64=null;showSubS('inv');}
   else toast('Error','err');
@@ -2267,7 +2295,7 @@ async function guardarSV(){
     if(!manual){toast('Especifica el código y descripción de la señal','err');return;}
     cod=manual;
   }
-  var urlF='';if(fSVB64.length){var rf=await api('subirFoto',fSVB64[0]);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
+  var urlF='';if(fSVB64.length){var rf=await apiPost('subirFoto',fSVB64[0]);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
   var datosSV={codigo:cod,tipo:catSenSel,descripcion:document.getElementById('sv-desc').value,calle,numero:document.getElementById('sv-num2').value,ladoCalzada:document.getElementById('sv-lado').value,soporte:document.getElementById('sv-sop').value,estado:document.getElementById('sv-est').value,fotoInicial:urlF,observaciones:document.getElementById('sv-obs').value};
   var r=await api('crearSenalV',datosSV);
   if(r.offline){encolarOffline('crearSenalV',datosSV);return;}
@@ -2283,7 +2311,7 @@ async function guardarSH(){
     if(!manual){toast('Especifica el tipo de señal','err');return;}
     tipo=manual;
   }
-  var urlF='';if(fSHB64.length){var rf=await api('subirFoto',fSHB64[0]);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
+  var urlF='';if(fSHB64.length){var rf=await apiPost('subirFoto',fSHB64[0]);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
   var datosSH={tipo:tipo,estado:document.getElementById('sh-est').value,calle,numero:document.getElementById('sh-numero').value,longitud:document.getElementById('sh-long').value,descripcion:document.getElementById('sh-obs').value,fotoInicial:urlF};
   var r=await api('crearSenalH',datosSH);
   if(r.offline){encolarOffline('crearSenalH',datosSH);return;}
@@ -2292,8 +2320,8 @@ async function guardarSH(){
 
 async function guardarSI(){
   var nom=document.getElementById('si-nom').value.trim();if(!nom){toast('El nombre es obligatorio','err');return;}
-  var urlF='';if(fSIB64.length){var rf=await api('subirFoto',fSIB64[0]);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
-  var urlC='';if(cSIB64.length){var rc=await api('subirFoto',cSIB64[0]);if(rc.ok)urlC=rc.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
+  var urlF='';if(fSIB64.length){var rf=await apiPost('subirFoto',fSIB64[0]);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
+  var urlC='';if(cSIB64.length){var rc=await apiPost('subirFoto',cSIB64[0]);if(rc.ok)urlC=rc.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
   var datosSI={nombre:nom,senalizacionExistente:document.getElementById('si-exist').value,deficit:document.getElementById('si-def').value,nivelRiesgo:document.getElementById('si-riesgo').value,propuestaActuacion:document.getElementById('si-prop').value,fotoInicial:urlF,croquisPropuesta:urlC};
   var r=await api('crearInterseccion',datosSI);
   if(r.offline){encolarOffline('crearInterseccion',datosSI);return;}
@@ -2343,7 +2371,7 @@ async function verDetInterseccion(id){
   if(i.croquisPropuesta)fotosArr.push({url:i.croquisPropuesta,etq:'Croquis de propuesta'});
   if(fotosArr.length){
     fotosCard.style.display='block';
-    fotosDiv.innerHTML=fotosArr.map(function(f){return'<a href="'+f.url+'" target="_blank"><img src="'+urlImg(f.url)+'" class="fth" style="width:100%"></a><div class="fcl">'+f.etq+'</div>';}).join('');
+    fotosDiv.innerHTML=fotosArr.map(function(f){return'<a href="'+f.url+'" target="_blank"><img class="fth lazyfoto" data-url="'+f.url+'" style="width:100%;min-height:80px;background:#eee"></a><div class="fcl">'+f.etq+'</div>';}).join('');activarFotosLazy(fotosDiv);
   }else{fotosCard.style.display='none';}
   document.getElementById('modal-veh-detalle').style.display='flex';
 }
@@ -2420,7 +2448,7 @@ async function guardarVeh(modo){
     if(!infs.length){toast('Selecciona al menos una infracción','err');return;}
     var rResDep=await resolverDepositoInmov();
     if(!rResDep.ok)return;
-    var urlsI=[],fallosI=0;for(var k=0;k<fInmovB64.length;k++){var rfi=await api('subirFoto',fInmovB64[k]);if(rfi.ok)urlsI.push(rfi.url);else fallosI++;}
+    var urlsI=[],fallosI=0;for(var k=0;k<fInmovB64.length;k++){var rfi=await apiPost('subirFoto',fInmovB64[k]);if(rfi.ok)urlsI.push(rfi.url);else fallosI++;}
     if(fallosI>0)toast('⚠️ '+fallosI+' foto(s) no se pudieron subir — se registrará sin ellas','err');
     var datosI={fase:'Vehículo sin seguro — retirada grúa',matricula:matI,bastidor:document.getElementById('inmov-bast').value,marca:document.getElementById('inmov-marca').value,modelo:document.getElementById('inmov-mod').value,color:document.getElementById('inmov-col').value,titular:document.getElementById('inmov-tit').value,dni:document.getElementById('inmov-dni').value,domicilio:document.getElementById('inmov-dom').value,telefono:document.getElementById('inmov-tel').value,calle:calleI,numero:document.getElementById('inmov-numref').value,infracciones:JSON.stringify(infs),nExpedienteInmovilizacion:document.getElementById('inmov-exp').value,pendienteRetirada:document.getElementById('inmov-pendiente').value,depositoId:rResDep.depositoId||'',observaciones:document.getElementById('inmov-obs').value,agentes:SES.usuario.badge,fotos:urlsI.join(','),municipio:'La Zubia'};
     var rI=await api('crearVehiculo',datosI);
@@ -2440,7 +2468,7 @@ async function guardarVeh(modo){
   if(modo==='negativa'){
     var matN=document.getElementById('vehneg-mat').value.trim(),calleN=document.getElementById('vehneg-calle').value.trim();
     if(!matN||!calleN){toast('Matrícula y calle son obligatorias','err');return;}
-    var urlsN=[],fallosN=0;for(var j=0;j<fVNegB64.length;j++){var rfn=await api('subirFoto',fVNegB64[j]);if(rfn.ok)urlsN.push(rfn.url);else fallosN++;}
+    var urlsN=[],fallosN=0;for(var j=0;j<fVNegB64.length;j++){var rfn=await apiPost('subirFoto',fVNegB64[j]);if(rfn.ok)urlsN.push(rfn.url);else fallosN++;}
     if(fallosN>0)toast('⚠️ '+fallosN+' foto(s) no se pudieron subir — se registrará sin ellas','err');
     var datosN={fase:'Consulta negativa',matricula:matN,marca:document.getElementById('vehneg-marca').value,calle:calleN,numero:document.getElementById('vehneg-num').value,observaciones:document.getElementById('vehneg-obs').value,agentes:SES.usuario.badge,fotos:urlsN.join(','),municipio:'La Zubia'};
     var rN=await api('crearVehiculo',datosN);
@@ -2453,7 +2481,7 @@ async function guardarVeh(modo){
   if(!mat||!calle){toast('Matrícula y calle son obligatorias','err');return;}
   var ind=[];document.querySelectorAll('.ib.sl').forEach(function(b){ind.push(b.dataset.ind);});
   if(!ind.length){toast('Selecciona al menos un indicio de abandono','err');return;}
-  var urls=[],fallosV=0;for(var i=0;i<fVB64.length;i++){var rf=await api('subirFoto',fVB64[i]);if(rf.ok)urls.push(rf.url);else fallosV++;}
+  var urls=[],fallosV=0;for(var i=0;i<fVB64.length;i++){var rf=await apiPost('subirFoto',fVB64[i]);if(rf.ok)urls.push(rf.url);else fallosV++;}
   if(fallosV>0)toast('⚠️ '+fallosV+' foto(s) no se pudieron subir — se registrará sin ellas','err');
   var datosVeh={fase:'Acta de vehículo abandonado',matricula:mat,bastidor:document.getElementById('veh-bast').value,marca:document.getElementById('veh-marca').value,modelo:document.getElementById('veh-mod').value,color:document.getElementById('veh-col').value,titular:document.getElementById('veh-tit').value,dni:document.getElementById('veh-dni').value,domicilio:document.getElementById('veh-dom').value,municipioTitular:document.getElementById('veh-mun').value,telefono:document.getElementById('veh-tel').value,calle,numero:document.getElementById('veh-numref').value,indicios:ind.join(', '),observaciones:document.getElementById('veh-obs').value,agentes:agSelVeh.map(function(a){return a.badge;}).join(';')||SES.usuario.badge,fotos:urls.join(','),municipio:'La Zubia'};
   var r=await api('crearVehiculo',datosVeh);
@@ -2571,7 +2599,7 @@ async function verDetOcup(id){
   var fotosArr=o.fotos?String(o.fotos).split(',').filter(Boolean):[];
   if(fotosArr.length){
     fotosCard.style.display='block';
-    fotosDiv.innerHTML=fotosArr.map(function(f){return'<a href="'+f+'" target="_blank"><img src="'+urlImg(f)+'" class="fth" style="width:100%"></a>';}).join('');
+    fotosDiv.innerHTML=fotosArr.map(function(f){return'<a href="'+f+'" target="_blank"><img class="fth lazyfoto" data-url="'+f+'" style="width:100%;min-height:80px;background:#eee"></a>';}).join('');activarFotosLazy(fotosDiv);
   }else{fotosCard.style.display='none';}
   document.getElementById('modal-veh-detalle').style.display='flex';
 }
@@ -2607,7 +2635,7 @@ async function verDetVeh(id){
   var fotosArr=v.fotos?String(v.fotos).split(',').filter(Boolean):[];
   if(fotosArr.length){
     fotosCard.style.display='block';
-    fotosDiv.innerHTML=fotosArr.map(function(f){return'<a href="'+f+'" target="_blank"><img src="'+urlImg(f)+'" class="fth" style="width:100%"></a>';}).join('');
+    fotosDiv.innerHTML=fotosArr.map(function(f){return'<a href="'+f+'" target="_blank"><img class="fth lazyfoto" data-url="'+f+'" style="width:100%;min-height:80px;background:#eee"></a>';}).join('');activarFotosLazy(fotosDiv);
   }else{fotosCard.style.display='none';}
   document.getElementById('modal-veh-detalle').style.display='flex';
 }
@@ -2799,7 +2827,7 @@ async function guardarOcupacion(){
     if(!otroDesc){toast('Especifica de qué se trata','err');return;}
     obs=('Tipo no catalogado: '+otroDesc)+(obs?' | '+obs:'');
   }
-  var urlsOcu=[],fallosOcu=0;for(var kOcu=0;kOcu<fOcuB64.length;kOcu++){var rfOcu=await api('subirFoto',fOcuB64[kOcu]);if(rfOcu.ok)urlsOcu.push(rfOcu.url);else fallosOcu++;}
+  var urlsOcu=[],fallosOcu=0;for(var kOcu=0;kOcu<fOcuB64.length;kOcu++){var rfOcu=await apiPost('subirFoto',fOcuB64[kOcu]);if(rfOcu.ok)urlsOcu.push(rfOcu.url);else fallosOcu++;}
   if(fallosOcu>0)toast('⚠️ '+fallosOcu+' foto(s) no se pudieron subir — se registrará sin ellas','err');
   var datos={
     tipoOcupacion:tipo,subtipo:sub,
@@ -3210,7 +3238,7 @@ async function enviarComp(compId){
   var res=document.getElementById('comp-res').value;
   var obs=document.getElementById('comp-obs').value;
   var urlF='';
-  if(fotoComp64){var rf=await api('subirFoto',fotoComp64);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
+  if(fotoComp64){var rf=await apiPost('subirFoto',fotoComp64);if(rf.ok)urlF=rf.url;else toast('⚠️ La foto no se pudo subir — se guarda sin ella','err');}
   var r=await api('realizarComprobacion',{id:compId,resultado:res,fotoComprobacion:urlF,observaciones:obs});
   if(r.ok){
     toast(res==='Resuelto'?'✅ Comprobación confirmada — incidencia resuelta':'⚠️ Comprobación realizada — incidencia reabierta',res==='Resuelto'?'ok':'err');
